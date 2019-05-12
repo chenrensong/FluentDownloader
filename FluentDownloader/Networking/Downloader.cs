@@ -353,11 +353,12 @@ namespace FluentDownloader.Networking
             {
                 retryCount++;
 
-                Console.WriteLine($"错误数据个数:{errorCount},开始第{retryCount}次重试");
                 if (retryCount > 3)
                 {
                     break;
                 }
+
+                Console.WriteLine($"错误数据个数:{errorCount},开始第{retryCount}次重试");
 
                 foreach (var item in DownloadInfo)
                 {
