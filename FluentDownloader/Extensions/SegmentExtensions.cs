@@ -45,6 +45,7 @@ namespace FluentDownloader.Extensions
                                     var response = await httpClient.GetAsync(downloadInfo.Url);
                                     downloadInfo.SrcStream = await response.Content.ReadAsStreamAsync();
                                     downloadInfo.Size = response.Content.Headers.ContentLength.GetValueOrDefault();
+                                    downloadInfo.End = downloadInfo.Size;
                                     if (downloadInfo.TotalReadBytes > 0)
                                     {
                                         ///设置文件流写入位置
@@ -104,6 +105,11 @@ namespace FluentDownloader.Extensions
                                     percentage = downloadInfo.Percentage;
                                     progressAction.Invoke(isFirst ? downloadInfo.TotalReadBytes : bytesRead, percentage); // To Get the current percentage.
                                     bytesRead = 0;
+                                }
+                                else
+                                {
+                                    Console.WriteLine("empty" + bytesRead);
+                                    //break;
                                 }
                                 isFirst = false;
                                 pipeline.Reader.AdvanceTo(readResult.Buffer.End);

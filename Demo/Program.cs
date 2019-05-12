@@ -13,7 +13,7 @@ namespace Demo
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
 
-            await HttpDown(stopwatch);
+            // await HttpDown(stopwatch);
             await M3U8Down(stopwatch);
 
             Console.ReadLine();

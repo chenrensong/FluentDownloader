@@ -26,16 +26,17 @@ namespace FluentDownloader.Networking
             return list;
         }
 
-        protected override Task<bool> LoadDownloadInfoAsync()
-        {
 
+
+        protected override Task<bool> LoadDownloadInfoAsync(bool LoadSrc = true)
+        {
             //本地文件路径
             var fileName = SuggestedFileName ?? DownloadInfo.ServerFileInfo.Name;
             var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
             fileName = $"{fileNameWithoutExtension}.mp4";
             LocalFileFullPath = Path.Combine(DirectoryPath, fileName);
             DownloadInfoFileFullPath = Path.Combine(DirectoryPath, $"{fileName}.json");
-            var flag = base.LoadDownloadInfoAsync();
+            var flag = base.LoadDownloadInfoAsync(false);
             return flag;
         }
 

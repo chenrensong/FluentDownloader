@@ -42,8 +42,15 @@ namespace FluentDownloader.NetworkFile
         {
             get
             {
-                var p = this.Select(m => m.Size);
-                return p.Sum();
+                try
+                {
+                    var p = this.Select(m => m.Size);
+                    return p.Sum();
+                }
+                catch (Exception ex)
+                {
+                    return 0;
+                }
             }
         }
 
