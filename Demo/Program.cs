@@ -28,9 +28,8 @@ namespace Demo
             //    }
             //});
 
-
-
-            var m3u8downloader = new M3U8Downloader("https://iqiyi.qq-zuidazy.com/20190506/10110_005140a1/800k/hls/index.m3u8", "C:\\Test");
+            var m3u8downloader = new M3U8Downloader("https://iqiyi.qq-zuidazy.com/20190506/10108_b2bd8bb2/800k/hls/index.m3u8", "C:\\Test");
+            m3u8downloader.SuggestedFileName = "3.m3u8";
             await m3u8downloader.LoadAsync();
             await m3u8downloader.DownloadFileAsync((e) =>
             {

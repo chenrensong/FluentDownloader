@@ -313,8 +313,48 @@ namespace FluentDownloader.Networking
             }
             speedCalculator.Start();
             await FileSegmentaionTasks.StartAndWaitAllThrottled(MaxThreadCount);
+
+            await CheckDownloadInfo(speedCalculator, cancellationToken);
+
             //await Task.WhenAny(FileSegmentaionTasks);
             await ReconstructSegmentsAsync();
+        }
+
+        /// <summary>
+        /// 检查是否下载完成
+        /// </summary>
+        /// <param name="speedCalculator"></param>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
+        private async Task CheckDownloadInfo(SpeedCalculator speedCalculator, CancellationToken cancellationToken)
+        {
+            var retryList = new List<Task>();
+            var retryCount = 0;
+            int errorCount = 0;
+            while ((errorCount = DownloadInfo.Count(m => m.Size == 0 || m.TotalReadBytes == 0 || m.TotalReadBytes < m.Size)) > 0)
+            {
+                retryCount++;
+
+                Console.WriteLine($"错误数据个数:{errorCount},开始第{retryCount}次重试");
+                if (retryCount > 3)
+                {
+                    break;
+                }
+
+                foreach (var item in DownloadInfo)
+                {
+                    if (item.Size == 0 || item.TotalReadBytes == 0 || item.TotalReadBytes < item.Size)
+                    {
+                        var task = DownloadSegmentFileAsync(item, (r, percentage) =>
+                        {
+                            speedCalculator.CurrentValue += r;
+                        }, cancellationToken);
+                        retryList.Add(task);
+                    }
+                }
+
+                await retryList.StartAndWaitAllThrottled(MaxThreadCount);
+            }
         }
 
 

@@ -16,6 +16,8 @@ namespace FluentDownloader.Networking
 
         private FileDownloader fileDownloader = null;
 
+        public string SuggestedFileName { get; set; }
+
         public M3U8Downloader(string url, string directoryPath)
         {
             this.Url = url;
@@ -25,6 +27,7 @@ namespace FluentDownloader.Networking
 
         public async Task LoadAsync()
         {
+            fileDownloader.SuggestedFileName = SuggestedFileName;
             await fileDownloader.LoadAsync();
         }
 
@@ -36,6 +39,7 @@ namespace FluentDownloader.Networking
             }, cancellationToken);
             var filePath = fileDownloader.LocalFileFullPath;
             var m3u8StreamDownloader = new M3U8StreamDownloader(Url, filePath, DirectoryPath);
+            m3u8StreamDownloader.SuggestedFileName = SuggestedFileName;
             await m3u8StreamDownloader.LoadAsync();
             await m3u8StreamDownloader.DownloadFileAsync(progressAction, cancellationToken);
         }

@@ -85,6 +85,7 @@ namespace FluentDownloader.Extensions
                         long bytesRead = 0;
                         try
                         {
+                            bool isFirst = true;
                             while (true)
                             {
                                 var readResult = await pipeline.Reader.ReadAsync(cancellationToken);
@@ -97,9 +98,10 @@ namespace FluentDownloader.Extensions
                                 if (bytesRead > 0)//有进度才会提示
                                 {
                                     percentage = downloadInfo.Percentage;
-                                    progressAction.Invoke(bytesRead, percentage); // To Get the current percentage.
+                                    progressAction.Invoke(isFirst ? downloadInfo.TotalReadBytes : bytesRead, percentage); // To Get the current percentage.
                                     bytesRead = 0;
                                 }
+                                isFirst = false;
                                 pipeline.Reader.AdvanceTo(readResult.Buffer.End);
                                 if (readResult.IsCompleted || readResult.IsCanceled)
                                 {
