@@ -324,18 +324,17 @@ namespace FluentDownloader.Networking
                 FileSegmentaionTasks.Add(task);
             }
             speedCalculator.Start();
-            await FileSegmentaionTasks.StartAndWaitAllThrottled(MaxThreadCount);
-
+            await Task.WhenAll(FileSegmentaionTasks);
+            //await FileSegmentaionTasks.StartAndWaitAllThrottled(MaxThreadCount);
             var errorCount = await CheckDownloadInfo(speedCalculator, cancellationToken);
-
+            speedCalculator.Stop();
             if (errorCount == 0)
             {
-                speedCalculator.Stop();
                 await CompleteAsync(true);
+                await ReconstructSegmentsAsync();
             }
 
             //await Task.WhenAny(FileSegmentaionTasks);
-            await ReconstructSegmentsAsync();
         }
 
         /// <summary>
@@ -346,7 +345,7 @@ namespace FluentDownloader.Networking
         /// <returns></returns>
         private async Task<int> CheckDownloadInfo(SpeedCalculator speedCalculator, CancellationToken cancellationToken)
         {
-            var retryList = new List<Task>();
+            var retryTasks = new List<Task>();
             var retryCount = 0;
             int errorCount = 0;
             while ((errorCount = DownloadInfo.Count(m => m.Size == 0 || m.TotalReadBytes == 0 || m.TotalReadBytes < m.Size)) > 0)
@@ -367,11 +366,12 @@ namespace FluentDownloader.Networking
                         {
                             speedCalculator.CurrentValue += r;
                         }, cancellationToken);
-                        retryList.Add(task);
+                        retryTasks.Add(task);
                     }
                 }
 
-                await retryList.StartAndWaitAllThrottled(MaxThreadCount);
+                await Task.WhenAll(retryTasks);
+                //await retryList.StartAndWaitAllThrottled(MaxThreadCount);
             }
             return errorCount;
 
