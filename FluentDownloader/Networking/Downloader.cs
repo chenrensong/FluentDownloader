@@ -287,6 +287,8 @@ namespace FluentDownloader.Networking
                 progressInfo.Percentage = DownloadInfo.Percentage;
                 progressInfo.TargetValue = DownloadInfo?.Size;
                 progressAction.Invoke(progressInfo);
+                var count = DownloadInfo.Count(m => m.Size == 0);
+                Console.WriteLine("count " + count);
                 await SaveDownloadInfoAsync();
                 //if (float.IsNaN(progressInfo.Percentage))
                 //{
