@@ -18,7 +18,8 @@ namespace FluentDownloader.Networking
         protected async override Task<IList<DownloadSegmentInfo>> LoadFileSegmentsAsync()
         {
             IList<DownloadSegmentInfo> list = null;
-            using (var stream = File.OpenRead(LocalPath))
+            var bytes = File.ReadAllBytes(LocalPath);
+            using (var stream = new MemoryStream(bytes))
             {
                 list = await LoadM3U8FileSegmentsAsync(stream);
             }
@@ -44,6 +45,11 @@ namespace FluentDownloader.Networking
             DownloadInfo.ServerFileInfo.Size = 0;
         }
 
+        /// <summary>
+        /// 加载M3U8分片内容
+        /// </summary>
+        /// <param name="stream"></param>
+        /// <returns></returns>
         private Task<IList<DownloadSegmentInfo>> LoadM3U8FileSegmentsAsync(Stream stream)
         {
             int Count = 0;
@@ -81,24 +87,13 @@ namespace FluentDownloader.Networking
                     Console.WriteLine($"Start {downloadSegmentInfo.Start}  {list.Count}");
                 }
             }
-            // Dictionary<string, ServerFileInfo> cache = new Dictionary<string, ServerFileInfo>();
-            // Parallel.ForEach(list, (item) =>
-            //{
-            //    var serverInfo = ServerHelper.LoadServerInfoAsync(item.Url).Result;
-            //    cache.Add(item.Url, serverInfo);
-            //    Console.WriteLine($"Cache Count {cache.Count}");
-            //});
-            // foreach (var item in list)
-            // {
-            //     var serverInfo = cache[item.Url];
-            //     item.Start = bytes;
-            //     item.End = bytes + serverInfo.Size;
-            //     item.Size = serverInfo.Size;
-            //     bytes += serverInfo.Size;
-            // }
             return Task.FromResult(list);
         }
 
+        /// <summary>
+        /// 重组分片
+        /// </summary>
+        /// <returns></returns>
         protected override async Task ReconstructSegmentsAsync()
         {
 
