@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace FluentDownloader.NetworkFile
 {
@@ -56,5 +57,12 @@ namespace FluentDownloader.NetworkFile
         /// </summary>
         [JsonIgnore]
         public Stream DstStream { get; set; }
+
+        /// <summary>
+        /// 临时文件
+        /// </summary>
+        [JsonIgnore]
+        public string TempFile { get; set; }
+
     }
 }

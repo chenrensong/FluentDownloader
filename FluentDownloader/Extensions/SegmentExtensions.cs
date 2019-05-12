@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 using System.IO.Pipelines;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,6 +21,17 @@ namespace FluentDownloader.Extensions
                         int bytesRead;
                         try
                         {
+                            if (downloadInfo.Percentage >= 100)
+                            {
+                                return;
+                            }
+                            if (downloadInfo.SrcStream == null)
+                            {
+                                using (HttpClient httpClient = new HttpClient())
+                                {
+                                    downloadInfo.SrcStream = await httpClient.GetStreamAsync(downloadInfo.Url);
+                                }
+                            }
                             while (true) // Where the downloading part is happening
                             {
                                 bytesRead = await downloadInfo.SrcStream.ReadAsync(pipeline.Writer.GetMemory(), cancellationToken);
@@ -42,6 +54,7 @@ namespace FluentDownloader.Extensions
                         }
                         catch (Exception ex)
                         {
+                            Console.WriteLine(ex.Message);
                             throw ex;
                         }
                     }, cancellationToken),
@@ -76,6 +89,7 @@ namespace FluentDownloader.Extensions
                         }
                         catch (Exception ex)
                         {
+                            Console.WriteLine(ex.Message);
                             throw ex;
                         }
                         finally

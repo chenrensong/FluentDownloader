@@ -25,7 +25,7 @@ namespace FluentDownloader.Networking
         /// <summary>
         /// 目标值
         /// </summary>
-        public long TargetValue;
+        public long? TargetValue;
 
         /// <summary>
         /// 剩余时间

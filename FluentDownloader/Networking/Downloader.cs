@@ -4,6 +4,8 @@ using FluentDownloader.NetworkFile;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.Contracts;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -39,7 +41,7 @@ namespace FluentDownloader.Networking
 
         internal DownloadInfo DownloadInfo { get; private set; }
 
-        internal IList<Task> FileSegmentaionTasks { get; private set; }
+        internal List<Task> FileSegmentaionTasks { get; private set; }
 
         internal string Url { get; set; }
 
@@ -52,6 +54,12 @@ namespace FluentDownloader.Networking
         internal string LocalFileFullPath { get; set; }
 
         internal string DownloadInfoFileFullPath { get; set; }
+
+        /// <summary>
+        /// 最大线程数
+        /// </summary>
+        private const int MaxThreadCount = 30;
+
 
         public Mode DownloadMode { get; set; } = Mode.FileExistsStopDownload;
 
@@ -96,62 +104,7 @@ namespace FluentDownloader.Networking
             }
         }
 
-        private async Task<bool> IsResumable(string url)
-        {
-            try
-            {
-                using (HttpClient httpClient = new HttpClient())
-                {
-                    httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue(1, 1);
-                    using (HttpResponseMessage Result = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
-                    {
-                        if (Result.StatusCode == HttpStatusCode.PartialContent)
-                        {
-                            return true;
-                        }
-                        else
-                        {
-                            return false;
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                return false;
-            }
-        }
 
-        /// <summary>
-        /// 加载文件信息
-        /// </summary>
-        /// <returns></returns>
-        private async Task<ServerFileInfo> LoadServerInfoAsync()
-        {
-            using (HttpClient httpClient = new HttpClient())
-            {
-                HttpResponseMessage httpResponseMessage = await httpClient.GetAsync(Url, HttpCompletionOption.ResponseHeadersRead);
-                if (httpResponseMessage.IsSuccessStatusCode == false)
-                {
-                    throw new Exception(httpResponseMessage.ReasonPhrase);
-                }
-                //Console.WriteLine($"Get responseHeadersRead {stopwatch.ElapsedMilliseconds}");
-                var isResumable = await IsResumable(Url);
-                //Console.WriteLine($"Get isResumable {stopwatch.ElapsedMilliseconds}");
-                var downloadContent = await httpResponseMessage.Content.ReadAsStreamAsync();
-                //Console.WriteLine($"Get downloadContent {stopwatch.ElapsedMilliseconds}");
-                return new ServerFileInfo
-                {
-                    Name = httpResponseMessage.Content.Headers?.ContentDisposition?.FileName ?? httpResponseMessage.RequestMessage.RequestUri.Segments.LastOrDefault(),
-                    MediaType = httpResponseMessage.Content.Headers.ContentType.MediaType,
-                    Size = httpResponseMessage.Content.Headers.ContentLength.GetValueOrDefault(),
-                    Extension = httpResponseMessage.Content.Headers.ContentType.MediaType.GetFileExtension(),
-                    IsResumable = isResumable,
-                    DownloadContent = downloadContent,
-                    TotalReadBytes = 0
-                };
-            }
-        }
 
         /// <summary>
         /// 加载文件分片信息
@@ -165,7 +118,7 @@ namespace FluentDownloader.Networking
             {
                 var chunkCount = ThreadCount;
                 //不支持Resume
-                if (DownloadInfo.ServerFileInfo == null || !DownloadInfo.ServerFileInfo.IsResumable)
+                if (DownloadInfo.ServerFileInfo == null || !DownloadInfo.ServerFileInfo.IsResumable || DownloadInfo.ServerFileInfo.Size < 1024 * 1024 * 1024)
                 {
                     chunkCount = 1;
                 }
@@ -187,7 +140,7 @@ namespace FluentDownloader.Networking
         }
 
         //还原下载信息
-        private async Task<bool> LoadDownloadInfoAsync()
+        protected virtual async Task<bool> LoadDownloadInfoAsync()
         {
             try
             {
@@ -238,11 +191,11 @@ namespace FluentDownloader.Networking
         /// 下载完成
         /// </summary>
         /// <returns></returns>
-        private async Task<bool> CompleteAsync()
+        private async Task<bool> CompleteAsync(bool isForce = false)
         {
             try
             {
-                if (DownloadInfo.Percentage >= 100)
+                if (isForce || DownloadInfo.Percentage >= 100)
                 {
                     File.Delete(DownloadInfoFileFullPath);
                 }
@@ -259,12 +212,12 @@ namespace FluentDownloader.Networking
         }
 
 
-        public async Task LoadAsync()
+        public virtual async Task LoadAsync()
         {
             //检查参数
             CheckArgument();
             //获取Server文件信息
-            DownloadInfo.ServerFileInfo = await LoadServerInfoAsync();
+            DownloadInfo.ServerFileInfo = await ServerHelper.LoadServerInfoAsync(Url);
             //本地文件路径
             var fileName = SuggestedFileName ?? DownloadInfo.ServerFileInfo.Name;
             //bool fileExists = File.Exists(LocalFileFullPath);
@@ -279,12 +232,26 @@ namespace FluentDownloader.Networking
             ///没有成功需要重新加载
             if (!loadSuccess)
             {
+                if (File.Exists(LocalFileFullPath))
+                {
+                    using (var localFile = new FileStream(LocalFileFullPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite))
+                    {
+                        if (localFile.Length >= DownloadInfo.ServerFileInfo.Size)
+                        {
+                            IsDownloaded = true;
+                            await CompleteAsync(true);
+                            return;
+                        }
+                    }
+                }
                 //拆分分片
-                var fileSegments = await LoadFileSegmentsAsync();
+                var fileSegments = await this.LoadFileSegmentsAsync();
                 DownloadInfo.AddRange(fileSegments);
                 await SaveDownloadInfoAsync();
             }
         }
+
+        public bool IsDownloaded = false;
 
 
         /// <summary>
@@ -295,6 +262,11 @@ namespace FluentDownloader.Networking
         /// <returns></returns>
         public async Task DownloadFileAsync(Action<ProgressInfo> progressAction, CancellationToken cancellationToken = default)
         {
+            if (IsDownloaded)
+            {
+                return;
+            }
+
             SpeedCalculator speedCalculator = new SpeedCalculator();
             ProgressInfo progressInfo = new ProgressInfo();
             speedCalculator.Updated += async (h) =>
@@ -302,19 +274,20 @@ namespace FluentDownloader.Networking
                 progressInfo.AverageSpeed = speedCalculator.AverageSpeed;
                 progressInfo.CurrentValue = speedCalculator.CurrentValue;
                 progressInfo.Speed = speedCalculator.Speed;
-                progressInfo.TargetValue = DownloadInfo.ServerFileInfo.Size;
+                progressInfo.TargetValue = DownloadInfo?.ServerFileInfo.Size;
                 progressInfo.Percentage = DownloadInfo.Percentage;
                 progressAction.Invoke(progressInfo);
                 await SaveDownloadInfoAsync();
-                if (progressInfo.Percentage >= 100)
+                if (progressInfo.CurrentValue >= DownloadInfo.ServerFileInfo.Size || progressInfo.Percentage >= 100)
                 {
                     speedCalculator.Stop();
-                    await CompleteAsync();
+                    await CompleteAsync(true);
                 }
             };
+
             foreach (var segment in DownloadInfo)
             {
-                if (segment.SrcStream == null)
+                if (segment.TotalReadBytes != 0 && segment.TotalReadBytes >= segment.Size)
                 {
                     continue;
                 }
@@ -325,8 +298,12 @@ namespace FluentDownloader.Networking
                 FileSegmentaionTasks.Add(task);
             }
             speedCalculator.Start();
-            await Task.WhenAll(FileSegmentaionTasks);
+            await FileSegmentaionTasks.StartAndWaitAllThrottled(MaxThreadCount);
+            //await Task.WhenAny(FileSegmentaionTasks);
+            await ReconstructSegmentsAsync();
         }
+
+
 
         /// <summary>
         /// 下载分片
@@ -337,11 +314,29 @@ namespace FluentDownloader.Networking
         /// <returns></returns>
         protected virtual Task DownloadSegmentFileAsync(DownloadSegmentInfo segment, Action<long, float> progressAction, CancellationToken cancellationToken = default)
         {
-            var localFile = new FileStream(LocalFileFullPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
-            localFile.Position = segment.Start + segment.TotalReadBytes;
+            Stream localFile = null;
+            if (string.IsNullOrEmpty(segment.TempFile))
+            {
+                localFile = new FileStream(LocalFileFullPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
+                localFile.Position = segment.Start + segment.TotalReadBytes;
+            }
+            else
+            {
+                //var directory = Path.GetDirectoryName(segment.TempFile);
+                //if (!Directory.Exists(directory))
+                //{
+                //    Directory.CreateDirectory(directory);
+                //}
+                localFile = new FileStream(segment.TempFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
+            }
             segment.DstStream = localFile;
             var task = segment.DownloadAsync(progressAction, cancellationToken);
             return task;
+        }
+
+        protected virtual Task ReconstructSegmentsAsync()
+        {
+            return Task.CompletedTask;
         }
 
     }

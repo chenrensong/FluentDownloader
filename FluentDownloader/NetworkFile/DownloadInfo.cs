@@ -17,7 +17,7 @@ namespace FluentDownloader.NetworkFile
         {
 
         }
-        
+
         /// <summary>
         /// 远程文件属性(不保存信息）
         /// </summary>
@@ -46,7 +46,12 @@ namespace FluentDownloader.NetworkFile
             get
             {
                 var p = this.Select(m => m.Percentage);
-                return p.Average();
+                var avg = p.Average();
+                if (float.IsNaN(avg))
+                {
+                    return TotalReadBytes / ServerFileInfo.Size * 100.0f;
+                }
+                return avg;
             }
         }
 
