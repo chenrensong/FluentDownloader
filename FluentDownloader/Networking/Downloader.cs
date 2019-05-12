@@ -330,8 +330,8 @@ namespace FluentDownloader.Networking
             speedCalculator.Stop();
             if (errorCount == 0)
             {
-                await CompleteAsync(true);
                 await ReconstructSegmentsAsync();
+                await CompleteAsync(true);
             }
 
             //await Task.WhenAny(FileSegmentaionTasks);
@@ -348,7 +348,8 @@ namespace FluentDownloader.Networking
             var retryTasks = new List<Task>();
             var retryCount = 0;
             int errorCount = 0;
-            while ((errorCount = DownloadInfo.Count(m => m.Size == 0 || m.TotalReadBytes == 0 || m.TotalReadBytes < m.Size)) > 0)
+            while ((errorCount = DownloadInfo.Count(m => m.Size == 0 || m.TotalReadBytes == 0 || m.TotalReadBytes < m.Size ||
+            (!string.IsNullOrEmpty(m.TempFile) && !File.Exists(m.TempFile)))) > 0)
             {
                 retryCount++;
 
