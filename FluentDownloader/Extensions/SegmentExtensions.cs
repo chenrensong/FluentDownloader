@@ -41,16 +41,18 @@ namespace FluentDownloader.Extensions
                                     {
                                         httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue(downloadInfo.TotalReadBytes, downloadInfo.Size);
                                     }
-                                    httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.143 Safari/537.36");
+                                    //httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.143 Safari/537.36");
                                     var response = await httpClient.GetAsync(downloadInfo.Url);
                                     downloadInfo.SrcStream = await response.Content.ReadAsStreamAsync();
                                     downloadInfo.Size = response.Content.Headers.ContentLength.GetValueOrDefault();
                                     if (downloadInfo.TotalReadBytes > 0)
                                     {
+                                        ///设置文件流写入位置
                                         downloadInfo.DstStream.Position = downloadInfo.TotalReadBytes;
                                     }
                                 }
                             }
+
                             while (true) // Where the downloading part is happening
                             {
                                 bytesRead = await downloadInfo.SrcStream.ReadAsync(pipeline.Writer.GetMemory(), cancellationToken);
@@ -70,9 +72,11 @@ namespace FluentDownloader.Extensions
                                 }
                             }
                             pipeline.Writer.Complete();
+                            isCompleted = true;
                         }
                         catch (Exception ex)
                         {
+                            isCompleted = true;
                             Console.WriteLine(ex.Message);
                             //pipeline.Writer.Complete();
                             //throw ex;
