@@ -34,12 +34,13 @@ namespace FluentDownloader.Networking
             {
                 Console.WriteLine($"M3U8 Time:{e.Time} AverageSpeed:{e.AverageSpeed.SizeSuffix()} CurrentValue:{e.CurrentValue.SizeSuffix()} Speed:{e.Speed.SizeSuffix()} Percentage:{e.Percentage}");
             }, cancellationToken);
-            var m3u8StreamDownloader = new M3U8StreamDownloader(Url, fileDownloader.LocalFileFullPath, DirectoryPath);
+            var filePath = fileDownloader.LocalFileFullPath;
+            var m3u8StreamDownloader = new M3U8StreamDownloader(Url, filePath, DirectoryPath);
             await m3u8StreamDownloader.LoadAsync();
             await m3u8StreamDownloader.DownloadFileAsync(progressAction, cancellationToken);
         }
 
-      
+
 
     }
 }

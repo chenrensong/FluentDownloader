@@ -249,6 +249,7 @@ namespace FluentDownloader.Networking
                 DownloadInfo.AddRange(fileSegments);
                 await SaveDownloadInfoAsync();
             }
+
         }
 
         public bool IsDownloaded = false;
@@ -276,9 +277,22 @@ namespace FluentDownloader.Networking
                 progressInfo.Speed = speedCalculator.Speed;
                 progressInfo.TargetValue = DownloadInfo?.ServerFileInfo.Size;
                 progressInfo.Percentage = DownloadInfo.Percentage;
-                progressAction.Invoke(progressInfo);
                 await SaveDownloadInfoAsync();
-                if (progressInfo.CurrentValue >= DownloadInfo.ServerFileInfo.Size || progressInfo.Percentage >= 100)
+                if (float.IsNaN(progressInfo.Percentage))
+                {
+                    var count = DownloadInfo.Count(m => m.Size == 0);
+                    Console.WriteLine("count " + count);
+                    if (count == 0)
+                    {
+                        progressInfo.TargetValue = DownloadInfo.Size;
+                    }
+                    else
+                    {
+                        progressInfo.Percentage = 0;
+                    }
+                }
+                progressAction.Invoke(progressInfo);
+                if (progressInfo.Percentage >= 100)//|| (DownloadInfo.Size > 0 && DownloadInfo.Size <= DownloadInfo.TotalReadBytes)
                 {
                     speedCalculator.Stop();
                     await CompleteAsync(true);
@@ -322,11 +336,6 @@ namespace FluentDownloader.Networking
             }
             else
             {
-                //var directory = Path.GetDirectoryName(segment.TempFile);
-                //if (!Directory.Exists(directory))
-                //{
-                //    Directory.CreateDirectory(directory);
-                //}
                 localFile = new FileStream(segment.TempFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
             }
             segment.DstStream = localFile;

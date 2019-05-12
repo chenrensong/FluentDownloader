@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.IO.Pipelines;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,6 +15,7 @@ namespace FluentDownloader.Extensions
          Action<long, float> progressAction, CancellationToken cancellationToken = default)
         {
             Pipe pipeline = new Pipe();
+            bool isCompleted = false;
             await Task.WhenAll
                 (
                     Task.Run(async () =>
@@ -23,13 +25,30 @@ namespace FluentDownloader.Extensions
                         {
                             if (downloadInfo.Percentage >= 100)
                             {
+                                isCompleted = true;
+                                return;
+                            }
+                            if (downloadInfo.Size != 0 && downloadInfo.TotalReadBytes == downloadInfo.Size)
+                            {
+                                isCompleted = true;
                                 return;
                             }
                             if (downloadInfo.SrcStream == null)
                             {
                                 using (HttpClient httpClient = new HttpClient())
                                 {
-                                    downloadInfo.SrcStream = await httpClient.GetStreamAsync(downloadInfo.Url);
+                                    if (downloadInfo.Size != 0)
+                                    {
+                                        httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue(downloadInfo.TotalReadBytes, downloadInfo.Size);
+                                    }
+                                    httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.143 Safari/537.36");
+                                    var response = await httpClient.GetAsync(downloadInfo.Url);
+                                    downloadInfo.SrcStream = await response.Content.ReadAsStreamAsync();
+                                    downloadInfo.Size = response.Content.Headers.ContentLength.GetValueOrDefault();
+                                    if (downloadInfo.TotalReadBytes > 0)
+                                    {
+                                        downloadInfo.DstStream.Position = downloadInfo.TotalReadBytes;
+                                    }
                                 }
                             }
                             while (true) // Where the downloading part is happening
@@ -55,7 +74,8 @@ namespace FluentDownloader.Extensions
                         catch (Exception ex)
                         {
                             Console.WriteLine(ex.Message);
-                            throw ex;
+                            //pipeline.Writer.Complete();
+                            //throw ex;
                         }
                     }, cancellationToken),
 
@@ -85,12 +105,16 @@ namespace FluentDownloader.Extensions
                                 {
                                     break;
                                 }
+                                if (isCompleted)
+                                {
+                                    break;
+                                }
                             }
                         }
                         catch (Exception ex)
                         {
                             Console.WriteLine(ex.Message);
-                            throw ex;
+                            //throw ex;
                         }
                         finally
                         {

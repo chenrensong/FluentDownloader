@@ -1,11 +1,8 @@
-﻿using System;
+﻿using FluentDownloader.NetworkFile;
+using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Net.Http;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
-using FluentDownloader.NetworkFile;
 
 namespace FluentDownloader.Networking
 {
@@ -30,20 +27,21 @@ namespace FluentDownloader.Networking
 
         protected override Task<bool> LoadDownloadInfoAsync()
         {
-            var flag = base.LoadDownloadInfoAsync();
+
             //本地文件路径
             var fileName = SuggestedFileName ?? DownloadInfo.ServerFileInfo.Name;
             var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
             fileName = $"{fileNameWithoutExtension}.mp4";
             LocalFileFullPath = Path.Combine(DirectoryPath, fileName);
             DownloadInfoFileFullPath = Path.Combine(DirectoryPath, $"{fileName}.json");
+            var flag = base.LoadDownloadInfoAsync();
             return flag;
         }
 
         public override async Task LoadAsync()
         {
             await base.LoadAsync();
-
+            DownloadInfo.ServerFileInfo.Size = 0;
         }
 
         private Task<IList<DownloadSegmentInfo>> LoadM3U8FileSegmentsAsync(Stream stream)
@@ -72,20 +70,15 @@ namespace FluentDownloader.Networking
                 }
                 if (!string.IsNullOrEmpty(newUrl))
                 {
-                    //var serverInfo = await ServerHelper.LoadServerInfoAsync(newUrl);
                     var downloadSegmentInfo = new DownloadSegmentInfo()
                     {
                         ID = Count++,
                         Url = newUrl,
-                        //Start = bytes,
-                        //End = bytes + serverInfo.Size,
-                        //Size = serverInfo.Size,
                         TotalReadBytes = 0,
                         TempFile = Path.GetTempFileName()
                     };
                     list.Add(downloadSegmentInfo);
                     Console.WriteLine($"Start {downloadSegmentInfo.Start}  {list.Count}");
-                    //bytes += serverInfo.Size;
                 }
             }
             // Dictionary<string, ServerFileInfo> cache = new Dictionary<string, ServerFileInfo>();
@@ -95,7 +88,6 @@ namespace FluentDownloader.Networking
             //    cache.Add(item.Url, serverInfo);
             //    Console.WriteLine($"Cache Count {cache.Count}");
             //});
-
             // foreach (var item in list)
             // {
             //     var serverInfo = cache[item.Url];
@@ -114,13 +106,11 @@ namespace FluentDownloader.Networking
             {
                 return;
             }
-
             using (Stream localFileStream = new FileStream(LocalFileFullPath, FileMode.Create, FileAccess.ReadWrite))
             {
+                localFileStream.Seek(0, SeekOrigin.Begin);
                 foreach (var Segment in DownloadInfo)
                 {
-                    localFileStream.Seek(Segment.Start, SeekOrigin.Begin);
-
                     using (Stream tempStream = new FileStream(Segment.TempFile, FileMode.Open, FileAccess.Read))
                     {
                         await tempStream.CopyToAsync(localFileStream);

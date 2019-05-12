@@ -61,7 +61,7 @@ namespace FluentDownloader.NetworkFile
         /// <summary>
         /// 临时文件
         /// </summary>
-        [JsonIgnore]
+        [JsonProperty]
         public string TempFile { get; set; }
 
     }

@@ -37,6 +37,17 @@ namespace FluentDownloader.NetworkFile
             }
         }
 
+        [JsonIgnore]
+        public long Size
+        {
+            get
+            {
+                var p = this.Select(m => m.Size);
+                return p.Sum();
+            }
+        }
+
+
         /// <summary>
         /// 下载进度
         /// </summary>
@@ -49,7 +60,10 @@ namespace FluentDownloader.NetworkFile
                 var avg = p.Average();
                 if (float.IsNaN(avg))
                 {
-                    return TotalReadBytes / ServerFileInfo.Size * 100.0f;
+                    if (ServerFileInfo.Size != 0)
+                    {
+                        return TotalReadBytes / ServerFileInfo.Size * 100.0f;
+                    }
                 }
                 return avg;
             }
