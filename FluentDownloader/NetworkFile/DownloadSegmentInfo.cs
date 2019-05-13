@@ -44,7 +44,12 @@ namespace FluentDownloader.NetworkFile
         {
             get
             {
-                return (TotalReadBytes / (float)Size) * 100;
+                if (Size == 0)
+                {
+                    return 0;
+                }
+                var percentage = (TotalReadBytes / (float)Size) * 100;
+                return percentage;
             }
         }
         /// <summary>

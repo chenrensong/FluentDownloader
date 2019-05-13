@@ -114,28 +114,28 @@ namespace FluentDownloader.Networking
         {
             var list = new List<DownloadSegmentInfo>();
             int count = 0;
-            using (HttpClient httpClient = new HttpClient())
+
+            var chunkCount = ThreadCount;
+            //不支持Resume
+            if (DownloadInfo.ServerFileInfo == null || !DownloadInfo.ServerFileInfo.IsResumable || DownloadInfo.ServerFileInfo.Size < 1024 * 1024 * 1024)
             {
-                var chunkCount = ThreadCount;
-                //不支持Resume
-                if (DownloadInfo.ServerFileInfo == null || !DownloadInfo.ServerFileInfo.IsResumable || DownloadInfo.ServerFileInfo.Size < 1024 * 1024 * 1024)
-                {
-                    chunkCount = 1;
-                }
-                foreach (var (Start, End) in SegmentPosition(DownloadInfo.ServerFileInfo.Size, chunkCount))
-                {
-                    httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue(Start, End);
-                    list.Add(new DownloadSegmentInfo
-                    {
-                        ID = count++,
-                        SrcStream = await httpClient.GetStreamAsync(Url),
-                        Start = Start,
-                        End = End,
-                        Size = End - Start,
-                        TotalReadBytes = 0,
-                    });
-                }
+                chunkCount = 1;
             }
+            var httpClient = HttpClientFactory.Instance.GetHttpClient(Url);
+            foreach (var (Start, End) in SegmentPosition(DownloadInfo.ServerFileInfo.Size, chunkCount))
+            {
+                httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue(Start, End);
+                list.Add(new DownloadSegmentInfo
+                {
+                    ID = count++,
+                    SrcStream = await httpClient.GetStreamAsync(Url),
+                    Start = Start,
+                    End = End,
+                    Size = End - Start,
+                    TotalReadBytes = 0,
+                });
+            }
+
             return list;
         }
 
@@ -155,15 +155,13 @@ namespace FluentDownloader.Networking
 
                     if (LoadSrc)
                     {
-                        using (HttpClient httpClient = new HttpClient())
+                        foreach (var item in downloadInfo)
                         {
-                            foreach (var item in downloadInfo)
+                            if (item.TotalReadBytes < item.Size)
                             {
-                                if (item.TotalReadBytes < item.Size)
-                                {
-                                    httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue(item.Start + item.TotalReadBytes, item.End);
-                                    item.SrcStream = await httpClient.GetStreamAsync(item.Url ?? Url);
-                                }
+                                var httpClient = HttpClientFactory.Instance.GetHttpClient(item.Url ?? Url);
+                                httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue(item.Start + item.TotalReadBytes, item.End);
+                                item.SrcStream = await httpClient.GetStreamAsync(item.Url ?? Url);
                             }
                         }
                     }
@@ -276,9 +274,9 @@ namespace FluentDownloader.Networking
             {
                 return;
             }
-
             SpeedCalculator speedCalculator = new SpeedCalculator();
             ProgressInfo progressInfo = new ProgressInfo();
+            bool isCompleted = false;
             speedCalculator.Updated += async (h) =>
             {
                 progressInfo.AverageSpeed = speedCalculator.AverageSpeed;
@@ -288,27 +286,15 @@ namespace FluentDownloader.Networking
                 progressInfo.TargetValue = DownloadInfo?.Size;
                 progressAction.Invoke(progressInfo);
                 var count = DownloadInfo.Count(m => m.Size == 0);
-                Console.WriteLine("count " + count);
-                await SaveDownloadInfoAsync();
-                //if (float.IsNaN(progressInfo.Percentage))
-                //{
-                //    var count = DownloadInfo.Count(m => m.Size == 0);
-                //    Console.WriteLine("count " + count);
-                //    if (count == 0)
-                //    {
-                //        progressInfo.TargetValue = DownloadInfo.Size;
-                //    }
-                //    else
-                //    {
-                //        progressInfo.Percentage = 0;
-                //    }
-                //}
-                //progressAction.Invoke(progressInfo);
-                //if (progressInfo.Percentage >= 100)//|| (DownloadInfo.Size > 0 && DownloadInfo.Size <= DownloadInfo.TotalReadBytes)
-                //{
-                //    speedCalculator.Stop();
-                //    await CompleteAsync(true);
-                //}
+                Console.WriteLine("count " + count + " size " + DownloadInfo.Size + " read size " + DownloadInfo.TotalReadBytes);
+                if (isCompleted)
+                {
+                    speedCalculator.Stop();
+                }
+                else
+                {
+                    await SaveDownloadInfoAsync();
+                }
             };
 
             foreach (var segment in DownloadInfo)
@@ -324,17 +310,15 @@ namespace FluentDownloader.Networking
                 FileSegmentaionTasks.Add(task);
             }
             speedCalculator.Start();
-            await Task.WhenAll(FileSegmentaionTasks);
-            //await FileSegmentaionTasks.StartAndWaitAllThrottled(MaxThreadCount);
+            await FileSegmentaionTasks.StartAndWaitAllThrottled(MaxThreadCount);
             var errorCount = await CheckDownloadInfo(speedCalculator, cancellationToken);
-            speedCalculator.Stop();
+            ///错误数量
             if (errorCount == 0)
             {
                 await ReconstructSegmentsAsync();
                 await CompleteAsync(true);
             }
-
-            //await Task.WhenAny(FileSegmentaionTasks);
+            isCompleted = true;
         }
 
         /// <summary>
@@ -364,6 +348,7 @@ namespace FluentDownloader.Networking
                 {
                     if (item.Size == 0 || item.TotalReadBytes == 0 || item.TotalReadBytes < item.Size)
                     {
+                        item.SrcStream = null;
                         var task = DownloadSegmentFileAsync(item, (r, percentage) =>
                         {
                             speedCalculator.CurrentValue += r;
@@ -371,15 +356,11 @@ namespace FluentDownloader.Networking
                         retryTasks.Add(task);
                     }
                 }
-
-                await Task.WhenAll(retryTasks);
-                //await retryList.StartAndWaitAllThrottled(MaxThreadCount);
+                await retryTasks.StartAndWaitAllThrottled(MaxThreadCount);
             }
             return errorCount;
 
         }
-
-
 
         /// <summary>
         /// 下载分片

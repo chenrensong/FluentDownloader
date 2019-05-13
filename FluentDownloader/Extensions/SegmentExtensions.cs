@@ -1,4 +1,5 @@
-﻿using FluentDownloader.NetworkFile;
+﻿using FluentDownloader.Internal;
+using FluentDownloader.NetworkFile;
 using System;
 using System.IO;
 using System.IO.Pipelines;
@@ -35,22 +36,23 @@ namespace FluentDownloader.Extensions
                             }
                             if (downloadInfo.SrcStream == null)
                             {
-                                using (HttpClient httpClient = new HttpClient())
+                                var httpClient = HttpClientFactory.Instance.GetHttpClient(downloadInfo.Url);
+                                if (downloadInfo.Size != 0)
                                 {
-                                    if (downloadInfo.Size != 0)
-                                    {
-                                        httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue(downloadInfo.TotalReadBytes, downloadInfo.Size);
-                                    }
-                                    //httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.143 Safari/537.36");
-                                    var response = await httpClient.GetAsync(downloadInfo.Url);
-                                    downloadInfo.SrcStream = await response.Content.ReadAsStreamAsync();
-                                    downloadInfo.Size = response.Content.Headers.ContentLength.GetValueOrDefault();
-                                    downloadInfo.End = downloadInfo.Size;
-                                    if (downloadInfo.TotalReadBytes > 0)
-                                    {
-                                        ///设置文件流写入位置
-                                        downloadInfo.DstStream.Position = downloadInfo.TotalReadBytes;
-                                    }
+                                    httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue(downloadInfo.TotalReadBytes, downloadInfo.Size);
+                                }
+                                var response = await httpClient.GetAsync(downloadInfo.Url);
+                                downloadInfo.SrcStream = await response.Content.ReadAsStreamAsync();
+                                var size = response.Content.Headers.ContentLength.GetValueOrDefault();
+                                if (size > 0)
+                                {
+                                    downloadInfo.Size = size;
+                                    downloadInfo.End = size;
+                                }
+                                if (downloadInfo.TotalReadBytes > 0)
+                                {
+                                    ///设置文件流写入位置
+                                    downloadInfo.DstStream.Position = downloadInfo.TotalReadBytes;
                                 }
                             }
 

@@ -63,15 +63,8 @@ namespace FluentDownloader.NetworkFile
         {
             get
             {
-                var p = this.Select(m => m.Percentage);
+                var p = this.Where(m => !float.IsNaN(m.Percentage)).Select(m => m.Percentage);
                 var avg = p.Average();
-                if (float.IsNaN(avg))
-                {
-                    if (ServerFileInfo.Size != 0)
-                    {
-                        return TotalReadBytes / ServerFileInfo.Size * 100.0f;
-                    }
-                }
                 return avg;
             }
         }
