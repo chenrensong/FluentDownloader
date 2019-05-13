@@ -46,8 +46,15 @@ namespace FluentDownloader.Extensions
                                 var size = response.Content.Headers.ContentLength.GetValueOrDefault();
                                 if (size > 0)
                                 {
-                                    downloadInfo.Size = size;
-                                    downloadInfo.End = size;
+                                    if (size < downloadInfo.Size && downloadInfo.Size != 0)
+                                    {
+                                        //分片的问题，不用设置大小，不然会偏小
+                                    }
+                                    else
+                                    {
+                                        downloadInfo.Size = size;
+                                        downloadInfo.End = size;
+                                    }
                                 }
                                 if (downloadInfo.TotalReadBytes > 0)
                                 {

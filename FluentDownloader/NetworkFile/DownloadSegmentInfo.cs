@@ -36,6 +36,13 @@ namespace FluentDownloader.NetworkFile
         /// </summary>
         [JsonProperty]
         public long TotalReadBytes { get; set; }
+
+        /// <summary>
+        /// 临时文件
+        /// </summary>
+        [JsonProperty]
+        public string TempFile { get; set; }
+
         /// <summary>
         /// 下载百分比
         /// </summary>
@@ -52,6 +59,7 @@ namespace FluentDownloader.NetworkFile
                 return percentage;
             }
         }
+
         /// <summary>
         /// 下载Stream
         /// </summary>
@@ -63,11 +71,7 @@ namespace FluentDownloader.NetworkFile
         [JsonIgnore]
         public Stream DstStream { get; set; }
 
-        /// <summary>
-        /// 临时文件
-        /// </summary>
-        [JsonProperty]
-        public string TempFile { get; set; }
+  
 
     }
 }
