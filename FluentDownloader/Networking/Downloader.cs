@@ -58,7 +58,7 @@ namespace FluentDownloader.Networking
         /// <summary>
         /// 最大线程数
         /// </summary>
-        private const int MaxThreadCount = 30;
+        private const int MaxThreadCount = 10;
 
 
         public Mode DownloadMode { get; set; } = Mode.FileExistsStopDownload;
@@ -275,8 +275,13 @@ namespace FluentDownloader.Networking
                 return;
             }
             SpeedCalculator speedCalculator = new SpeedCalculator();
+            speedCalculator.CurrentValue = DownloadInfo.TotalReadBytes;
             ProgressInfo progressInfo = new ProgressInfo();
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            var unionTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cancellationTokenSource.Token);
             bool isCompleted = false;
+            bool isRetry = true;
+            //int retryCount = 0;
             speedCalculator.Updated += async (h) =>
             {
                 progressInfo.AverageSpeed = speedCalculator.AverageSpeed;
@@ -295,8 +300,44 @@ namespace FluentDownloader.Networking
                 {
                     await SaveDownloadInfoAsync();
                 }
+                ///需要重试
+                if (h.NeedRetry && !isRetry)
+                {
+                    isRetry = true;
+                    //判断是否支持重试
+                    if (DownloadInfo.ServerFileInfo.IsResumable)
+                    {
+                        cancellationTokenSource.Cancel();
+                        h.NeedRetry = false;
+                    }
+                }
             };
+            speedCalculator.Start();
+            await CreateDownloadTask(speedCalculator, unionTokenSource.Token);
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                if (cancellationTokenSource.IsCancellationRequested)
+                {
+                    cancellationTokenSource = new CancellationTokenSource();
+                }
+                var errorCount = await CheckDownloadInfo(speedCalculator, cancellationToken, cancellationTokenSource);
+                if (errorCount == 0)///错误数量
+                {
+                    await ReconstructSegmentsAsync();
+                    await CompleteAsync(true);
+                }
+            }
+            isCompleted = true;
+        }
 
+        /// <summary>
+        /// 创建下载任务
+        /// </summary>
+        /// <param name="speedCalculator"></param>
+        /// <param name="unionTokenSource"></param>
+        private async Task CreateDownloadTask(SpeedCalculator speedCalculator, CancellationToken unionToken)
+        {
+            FileSegmentaionTasks.Clear();
             foreach (var segment in DownloadInfo)
             {
                 if (segment.TotalReadBytes != 0 && segment.TotalReadBytes >= segment.Size)
@@ -306,19 +347,17 @@ namespace FluentDownloader.Networking
                 var task = DownloadSegmentFileAsync(segment, (r, percentage) =>
                 {
                     speedCalculator.CurrentValue += r;
-                }, cancellationToken);
+                }, unionToken);
                 FileSegmentaionTasks.Add(task);
             }
-            speedCalculator.Start();
-            await FileSegmentaionTasks.StartAndWaitAllThrottled(MaxThreadCount);
-            var errorCount = await CheckDownloadInfo(speedCalculator, cancellationToken);
-            ///错误数量
-            if (errorCount == 0)
+            try
             {
-                await ReconstructSegmentsAsync();
-                await CompleteAsync(true);
+                await FileSegmentaionTasks.StartAndWaitAllThrottled(MaxThreadCount, unionToken);
             }
-            isCompleted = true;
+            catch (Exception ex)
+            {
+                Console.WriteLine("已取消操作");
+            }
         }
 
         /// <summary>
@@ -327,8 +366,9 @@ namespace FluentDownloader.Networking
         /// <param name="speedCalculator"></param>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        private async Task<int> CheckDownloadInfo(SpeedCalculator speedCalculator, CancellationToken cancellationToken)
+        private async Task<int> CheckDownloadInfo(SpeedCalculator speedCalculator, CancellationToken cancellationToken, CancellationTokenSource customSource)
         {
+            CancellationTokenSource unionTokenSource = null;
             var retryTasks = new List<Task>();
             var retryCount = 0;
             int errorCount = 0;
@@ -336,14 +376,19 @@ namespace FluentDownloader.Networking
             (!string.IsNullOrEmpty(m.TempFile) && !File.Exists(m.TempFile)))) > 0)
             {
                 retryCount++;
-
                 if (retryCount > 3)
                 {
                     break;
                 }
-
+                if (customSource.IsCancellationRequested)
+                {
+                    customSource = new CancellationTokenSource();
+                }
+                if (unionTokenSource == null)
+                {
+                    unionTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, customSource.Token);
+                }
                 Console.WriteLine($"错误数据个数:{errorCount},开始第{retryCount}次重试");
-
                 foreach (var item in DownloadInfo)
                 {
                     if (item.Size == 0 || item.TotalReadBytes == 0 || item.TotalReadBytes < item.Size)
@@ -352,7 +397,7 @@ namespace FluentDownloader.Networking
                         var task = DownloadSegmentFileAsync(item, (r, percentage) =>
                         {
                             speedCalculator.CurrentValue += r;
-                        }, cancellationToken);
+                        }, unionTokenSource.Token);
                         retryTasks.Add(task);
                     }
                 }
@@ -372,6 +417,12 @@ namespace FluentDownloader.Networking
         protected virtual Task DownloadSegmentFileAsync(DownloadSegmentInfo segment, Action<long, float> progressAction, CancellationToken cancellationToken = default)
         {
             Stream localFile = null;
+            if (segment.DstStream != null)
+            {
+                segment.DstStream.Close();
+                segment.DstStream.Dispose();
+                segment.DstStream = null;
+            }
             if (string.IsNullOrEmpty(segment.TempFile))
             {
                 localFile = new FileStream(LocalFileFullPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);

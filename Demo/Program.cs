@@ -3,6 +3,7 @@ using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using FluentDownloader.Extensions;
+using System.Threading;
 
 namespace Demo
 {
@@ -10,6 +11,7 @@ namespace Demo
     {
         static async Task Main(string[] args)
         {
+
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
 

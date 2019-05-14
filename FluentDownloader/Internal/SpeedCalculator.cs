@@ -13,6 +13,16 @@ namespace FluentDownloader.Internal
         private ulong time = 0;
         private Timer timer;
         private long lastValue = 0;
+        private long timeout = 0;
+        private long errorCount = 0;//无效计数
+        /// <summary>
+        ///  默认时间为60s
+        /// </summary>
+        /// <param name="timeout"></param>
+        public SpeedCalculator(long timeout = 1000 * 10)
+        {
+            this.timeout = timeout;
+        }
 
         /// <summary>
         /// 速度信息已更新
@@ -39,6 +49,8 @@ namespace FluentDownloader.Internal
         /// 平均速度
         /// </summary>
         public float AverageSpeed { get; private set; } = 0;
+
+        public bool NeedRetry { get; set; }
 
         /// <summary>
         /// 是否刷新速度
@@ -73,6 +85,20 @@ namespace FluentDownloader.Internal
             Speed = (CurrentValue - lastValue) / Interval * 1000;
             AverageSpeed = (time == 0 ? 0 : ((AverageSpeed * (time - 1) + Speed) / time));
             lastValue = CurrentValue;
+            if (Speed == 0)
+            {
+                errorCount++;
+                if (errorCount * Interval >= timeout)//如果超过超时时间需要重试
+                {
+                    NeedRetry = true;
+                    errorCount = 0;
+                }
+            }
+            else
+            {
+                NeedRetry = false;
+                errorCount = 0;
+            }
             Updated?.Invoke(this);
         }
 

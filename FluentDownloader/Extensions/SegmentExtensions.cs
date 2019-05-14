@@ -24,11 +24,6 @@ namespace FluentDownloader.Extensions
                         int bytesRead;
                         try
                         {
-                            if (downloadInfo.Percentage >= 100)
-                            {
-                                isCompleted = true;
-                                return;
-                            }
                             if (downloadInfo.Size != 0 && downloadInfo.TotalReadBytes == downloadInfo.Size)
                             {
                                 isCompleted = true;
@@ -37,35 +32,31 @@ namespace FluentDownloader.Extensions
                             if (downloadInfo.SrcStream == null)
                             {
                                 var httpClient = HttpClientFactory.Instance.GetHttpClient(downloadInfo.Url);
-                                if (downloadInfo.Size != 0)
+                                if (downloadInfo.Size != 0 && (downloadInfo.Start > 0 || downloadInfo.End > 0))
                                 {
-                                    httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue(downloadInfo.TotalReadBytes, downloadInfo.Size);
+                                    httpClient.DefaultRequestHeaders.Range = new RangeHeaderValue(downloadInfo.Start + downloadInfo.TotalReadBytes, downloadInfo.End);
                                 }
                                 var response = await httpClient.GetAsync(downloadInfo.Url);
                                 downloadInfo.SrcStream = await response.Content.ReadAsStreamAsync();
                                 var size = response.Content.Headers.ContentLength.GetValueOrDefault();
-                                if (size > 0)
+                                if (downloadInfo.Size == 0)
                                 {
-                                    if (size < downloadInfo.Size && downloadInfo.Size != 0)
-                                    {
-                                        //分片的问题，不用设置大小，不然会偏小
-                                    }
-                                    else
-                                    {
-                                        downloadInfo.Size = size;
-                                        downloadInfo.End = size;
-                                    }
+                                    downloadInfo.Size = size;
+                                    downloadInfo.End = size;
                                 }
                                 if (downloadInfo.TotalReadBytes > 0)
                                 {
                                     ///设置文件流写入位置
-                                    downloadInfo.DstStream.Position = downloadInfo.TotalReadBytes;
+                                    if (downloadInfo.DstStream != null)
+                                    {
+                                        downloadInfo.DstStream.Position = downloadInfo.Start + downloadInfo.TotalReadBytes;
+                                    }
                                 }
                             }
-
+                            var srcStream = downloadInfo.SrcStream;
                             while (true) // Where the downloading part is happening
                             {
-                                bytesRead = await downloadInfo.SrcStream.ReadAsync(pipeline.Writer.GetMemory(), cancellationToken);
+                                bytesRead = await srcStream.ReadAsync(pipeline.Writer.GetMemory(), cancellationToken);
                                 if (bytesRead <= 0)
                                 {
                                     break;
@@ -87,9 +78,7 @@ namespace FluentDownloader.Extensions
                         catch (Exception ex)
                         {
                             isCompleted = true;
-                            Console.WriteLine(ex.Message);
-                            //pipeline.Writer.Complete();
-                            //throw ex;
+                            Console.WriteLine("DownloadAsync Write " + ex.GetType().Name + ex.Message);
                         }
                     }, cancellationToken),
 
@@ -99,7 +88,6 @@ namespace FluentDownloader.Extensions
                         long bytesRead = 0;
                         try
                         {
-                            bool isFirst = true;
                             while (true)
                             {
                                 var readResult = await pipeline.Reader.ReadAsync(cancellationToken);
@@ -112,7 +100,7 @@ namespace FluentDownloader.Extensions
                                 if (bytesRead > 0)//有进度才会提示
                                 {
                                     percentage = downloadInfo.Percentage;
-                                    progressAction.Invoke(isFirst ? downloadInfo.TotalReadBytes : bytesRead, percentage); // To Get the current percentage.
+                                    progressAction.Invoke(bytesRead, percentage); // To Get the current percentage.
                                     bytesRead = 0;
                                 }
                                 else
@@ -120,7 +108,6 @@ namespace FluentDownloader.Extensions
                                     Console.WriteLine("empty" + bytesRead);
                                     //break;
                                 }
-                                isFirst = false;
                                 pipeline.Reader.AdvanceTo(readResult.Buffer.End);
                                 if (readResult.IsCompleted || readResult.IsCanceled)
                                 {
@@ -131,11 +118,11 @@ namespace FluentDownloader.Extensions
                                     break;
                                 }
                             }
+                            pipeline.Reader.Complete();
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine(ex.Message);
-                            //throw ex;
+                            Console.WriteLine("DownloadAsync Read " + ex.GetType().Name + ex.Message);
                         }
                         finally
                         {
@@ -145,7 +132,6 @@ namespace FluentDownloader.Extensions
                                 downloadInfo.DstStream.Dispose();
                             }
                         }
-                        pipeline.Reader.Complete();
                     }, cancellationToken)
                 );
         }
