@@ -26,7 +26,7 @@ namespace FluentDownloader.Networking
             this.Url = url;
             this.DirectoryPath = directoryPath;
             DownloadInfo = new DownloadInfo(threadCount);
-            FileSegmentaionTasks = new List<Task>(threadCount);
+            FileSegmentaionTasks = new List<DownloadTask>(threadCount);
         }
 
         public Downloader(string url, string directoryPath)
@@ -41,7 +41,7 @@ namespace FluentDownloader.Networking
 
         internal DownloadInfo DownloadInfo { get; private set; }
 
-        internal List<Task> FileSegmentaionTasks { get; private set; }
+        internal List<DownloadTask> FileSegmentaionTasks { get; private set; }
 
         internal string Url { get; set; }
 
@@ -148,9 +148,7 @@ namespace FluentDownloader.Networking
                 {
                     var downloadInfoText = File.ReadAllText(DownloadInfoFileFullPath);
                     var downloadInfo = JsonConvert.DeserializeObject<DownloadInfo>(downloadInfoText);
-
                     var count = downloadInfo.Count(m => m.Size == 0);
-
                     Console.WriteLine("downloadInfo" + count);
 
                     if (LoadSrc)
@@ -202,6 +200,10 @@ namespace FluentDownloader.Networking
         {
             try
             {
+                //foreach (var item in FileSegmentaionTasks)
+                //{
+                //    item.Dispose();
+                //}
                 if (isForce || DownloadInfo.Percentage >= 100)
                 {
                     File.Delete(DownloadInfoFileFullPath);
@@ -286,7 +288,7 @@ namespace FluentDownloader.Networking
                 progressInfo.TargetValue = DownloadInfo?.Size;
                 progressAction.Invoke(progressInfo);
                 var count = DownloadInfo.Count(m => m.Size == 0);
-                Console.WriteLine("count " + count + " size " + DownloadInfo.Size + " read size " + DownloadInfo.TotalReadBytes);
+                //Console.WriteLine("count " + count + " size " + DownloadInfo.Size + " read size " + DownloadInfo.TotalReadBytes);
                 if (isCompleted)
                 {
                     speedCalculator.Stop();
@@ -311,7 +313,7 @@ namespace FluentDownloader.Networking
             }
             speedCalculator.Start();
             await FileSegmentaionTasks.StartAndWaitAllThrottled(MaxThreadCount);
-            var errorCount = await CheckDownloadInfo(speedCalculator, cancellationToken);
+            var errorCount = await CheckDownloadInfoAsync(speedCalculator, cancellationToken);
             ///错误数量
             if (errorCount == 0)
             {
@@ -327,26 +329,22 @@ namespace FluentDownloader.Networking
         /// <param name="speedCalculator"></param>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        private async Task<int> CheckDownloadInfo(SpeedCalculator speedCalculator, CancellationToken cancellationToken)
+        private async Task<int> CheckDownloadInfoAsync(SpeedCalculator speedCalculator, CancellationToken cancellationToken)
         {
-            var retryTasks = new List<Task>();
+            var retryTasks = new List<DownloadTask>();
             var retryCount = 0;
             int errorCount = 0;
-            while ((errorCount = DownloadInfo.Count(m => m.Size == 0 || m.TotalReadBytes == 0 || m.TotalReadBytes < m.Size ||
-            (!string.IsNullOrEmpty(m.TempFile) && !File.Exists(m.TempFile)))) > 0)
+            Func<DownloadSegmentInfo, bool> predicate = GetCheckDownloadSegmentInfoFunc();
+            while ((errorCount = DownloadInfo.Count(predicate)) > 0)
             {
-                retryCount++;
-
-                if (retryCount > 3)
+                if (retryCount >= 3)
                 {
                     break;
                 }
-
                 Console.WriteLine($"错误数据个数:{errorCount},开始第{retryCount}次重试");
-
                 foreach (var item in DownloadInfo)
                 {
-                    if (item.Size == 0 || item.TotalReadBytes == 0 || item.TotalReadBytes < item.Size)
+                    if (predicate(item))
                     {
                         item.SrcStream = null;
                         var task = DownloadSegmentFileAsync(item, (r, percentage) =>
@@ -357,9 +355,19 @@ namespace FluentDownloader.Networking
                     }
                 }
                 await retryTasks.StartAndWaitAllThrottled(MaxThreadCount);
+                retryCount++;
             }
             return errorCount;
 
+        }
+
+        private Func<DownloadSegmentInfo, bool> GetCheckDownloadSegmentInfoFunc()
+        {
+            Func<DownloadSegmentInfo, bool> predicate = new Func<DownloadSegmentInfo, bool>((m) =>
+            {
+                return m.Size == 0 || m.TotalReadBytes == 0 || m.TotalReadBytes < m.Size || (!string.IsNullOrEmpty(m.TempFile) && !File.Exists(m.TempFile));
+            });
+            return predicate;
         }
 
         /// <summary>
@@ -369,7 +377,7 @@ namespace FluentDownloader.Networking
         /// <param name="progressAction"></param>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        protected virtual Task DownloadSegmentFileAsync(DownloadSegmentInfo segment, Action<long, float> progressAction, CancellationToken cancellationToken = default)
+        protected virtual DownloadTask DownloadSegmentFileAsync(DownloadSegmentInfo segment, Action<long, float> progressAction, CancellationToken cancellationToken = default)
         {
             Stream localFile = null;
             if (string.IsNullOrEmpty(segment.TempFile))
@@ -386,6 +394,10 @@ namespace FluentDownloader.Networking
             return task;
         }
 
+        /// <summary>
+        /// 合并分片（默认不需要合并）
+        /// </summary>
+        /// <returns></returns>
         protected virtual Task ReconstructSegmentsAsync()
         {
             return Task.CompletedTask;

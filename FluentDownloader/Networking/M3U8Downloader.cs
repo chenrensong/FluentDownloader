@@ -35,7 +35,7 @@ namespace FluentDownloader.Networking
         {
             await fileDownloader.DownloadFileAsync((e) =>
             {
-                Console.WriteLine($"M3U8 Time:{e.Time} AverageSpeed:{e.AverageSpeed.SizeSuffix()} CurrentValue:{e.CurrentValue.SizeSuffix()} Speed:{e.Speed.SizeSuffix()} Percentage:{e.Percentage}");
+                //Console.WriteLine($"M3U8 Time:{e.Time} AverageSpeed:{e.AverageSpeed.SizeSuffix()} CurrentValue:{e.CurrentValue.SizeSuffix()} Speed:{e.Speed.SizeSuffix()} Percentage:{e.Percentage}");
             }, cancellationToken);
             var filePath = fileDownloader.LocalFileFullPath;
             var m3u8StreamDownloader = new M3U8StreamDownloader(Url, filePath, DirectoryPath);

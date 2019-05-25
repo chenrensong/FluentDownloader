@@ -48,8 +48,8 @@ namespace Demo
             //https://iqiyi.qq-zuidazy.com/20190506/10105_fbb1785b/800k/hls/index.m3u8
             //https://iqiyi.qq-zuidazy.com/20190506/10104_771a135b/800k/hls/index.m3u8
             //https://iqiyi.qq-zuidazy.com/20190506/10103_5703cff8/800k/hls/index.m3u8
-            var m3u8downloader = new M3U8Downloader("https://bili.meijuzuida.com/20190513/14281_c9571896/800k/hls/index.m3u8", "C:\\Test");
-            m3u8downloader.SuggestedFileName = "13.m3u8";
+            var m3u8downloader = new M3U8Downloader("https://iqiyi.qq-zuidazy.com/20190524/11140_de848fc5/800k/hls/index.m3u8", "C:\\Test");
+            m3u8downloader.SuggestedFileName = "18.m3u8";
             await m3u8downloader.LoadAsync();
             await m3u8downloader.DownloadFileAsync((e) =>
             {

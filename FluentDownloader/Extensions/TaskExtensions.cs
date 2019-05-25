@@ -16,9 +16,9 @@ namespace FluentDownloader.Extensions
         /// <param name="tasksToRun">The tasks to run.</param>
         /// <param name="maxTasksToRunInParallel">The maximum number of tasks to run in parallel.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
-        public static async Task StartAndWaitAllThrottled(this IEnumerable<Task> tasksToRun, int maxTasksToRunInParallel, CancellationToken cancellationToken = new CancellationToken())
+        public static Task StartAndWaitAllThrottled(this IEnumerable<DownloadTask> tasksToRun, int maxTasksToRunInParallel, CancellationToken cancellationToken = new CancellationToken())
         {
-            await StartAndWaitAllThrottled(tasksToRun, maxTasksToRunInParallel, -1, cancellationToken);
+            return StartAndWaitAllThrottled(tasksToRun, maxTasksToRunInParallel, -1, cancellationToken);
         }
 
         /// <summary>
@@ -29,32 +29,60 @@ namespace FluentDownloader.Extensions
         /// <param name="maxTasksToRunInParallel">The maximum number of tasks to run in parallel.</param>
         /// <param name="timeoutInMilliseconds">The maximum milliseconds we should allow the max tasks to run in parallel before allowing another task to start. Specify -1 to wait indefinitely.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
-        public static async Task StartAndWaitAllThrottled(this IEnumerable<Task> tasksToRun, int maxTasksToRunInParallel, int timeoutInMilliseconds, CancellationToken cancellationToken = new CancellationToken())
+        public static Task StartAndWaitAllThrottled(this IEnumerable<DownloadTask> tasksToRun, int maxTasksToRunInParallel, int timeoutInMilliseconds, CancellationToken cancellationToken = new CancellationToken())
         {
-            // Convert to a list of tasks so that we don&#39;t enumerate over it multiple times needlessly.
-            var tasks = tasksToRun.ToList();
-
-            using (var throttler = new SemaphoreSlim(maxTasksToRunInParallel))
+            Queue<DownloadTask> queues = new Queue<DownloadTask>(tasksToRun);
+            var postTaskTasks = new List<Task>();
+            var threadCount = Math.Min(maxTasksToRunInParallel, queues.Count);
+            for (int i = 0; i < threadCount; i++)
             {
-                var postTaskTasks = new List<Task>();
-
-                // Have each task notify the throttler when it completes so that it decrements the number of tasks currently running.
-                tasks.ForEach(t => postTaskTasks.Add(t.ContinueWith(tsk => throttler.Release())));
-
-                // Start running each task.
-                foreach (var task in tasks)
-                {
-                    // Increment the number of tasks currently running and wait if too many are running.
-                    throttler.Wait(timeoutInMilliseconds, cancellationToken);
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await task;
-                    //task.Start();
-                }
-
-                // Wait for all of the provided tasks to complete.
-                // We wait on the list of "post" tasks instead of the original tasks, otherwise there is a potential race condition where the throttler&#39;s using block is exited before some Tasks have had their "post" action completed, which references the throttler, resulting in an exception due to accessing a disposed object.
-                Task.WaitAll(postTaskTasks.ToArray(), cancellationToken);
+                var task = StartNextTask(queues);
+                postTaskTasks.Add(task);
             }
+            return Task.WhenAll(postTaskTasks);
         }
+
+        private static Task StartNextTask(Queue<DownloadTask> queues)
+        {
+            if (queues.Count <= 0)
+            {
+                return null;
+            }
+            return Task.Run(async () =>
+            {
+                DownloadTask downloadTask = SafeDequeue(queues);
+                if (downloadTask != null)
+                {
+                    await downloadTask.StartAsync();
+                }
+                while (queues.Count > 0)
+                {
+                    DownloadTask nextTask = SafeDequeue(queues);
+                    if (nextTask != null)
+                    {
+                        await nextTask.StartAsync();
+                    }
+                }
+            });
+        }
+
+        private static DownloadTask SafeDequeue(Queue<DownloadTask> queues)
+        {
+            DownloadTask downloadTask = null;
+            try
+            {
+                lock (queues)
+                {
+                    downloadTask = queues.Dequeue();
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
+            return downloadTask;
+        }
+
+
     }
 }
