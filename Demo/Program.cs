@@ -29,7 +29,6 @@ namespace Demo
             await downloader.DownloadFileAsync((e) =>
             {
                 //Console.WriteLine(e); // Current Progress
-
                 Console.WriteLine($"Time:{e.Time} AverageSpeed:{e.AverageSpeed.SizeSuffix()} CurrentValue:{e.CurrentValue.SizeSuffix()} Speed:{e.Speed.SizeSuffix()} Percentage:{e.Percentage}");
                 if (e.Percentage >= 100)
                 {

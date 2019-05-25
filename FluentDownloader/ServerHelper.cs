@@ -30,9 +30,8 @@ namespace FluentDownloader
             stopwatch.Stop();
             Console.WriteLine($"Get responseHeadersRead {stopwatch.ElapsedMilliseconds}");
             stopwatch.Restart();
-            //var isResumable = await IsResumable(url);
             var contentLength = httpResponseMessage.Content.Headers.ContentLength;
-            var isResumable = await IsResumable(url);//contentLength.HasValue && contentLength.Value > 0;
+            var isResumable = contentLength.HasValue && contentLength.Value > 0;//await IsResumable(url);
             stopwatch.Stop();
             Console.WriteLine($"Get isResumable {stopwatch.ElapsedMilliseconds}");
             stopwatch.Restart();

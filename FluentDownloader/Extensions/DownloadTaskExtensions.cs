@@ -1,34 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace FluentDownloader.Extensions
 {
-    static class TaskExtensions
+    static class DownloadTaskExtensions
     {
-        /// <summary>
-        /// Starts the given tasks and waits for them to complete. This will run, at most, the specified number of tasks in parallel.
-        /// <para>NOTE: If one of the given tasks has already been started, an exception will be thrown.</para>
-        /// </summary>
-        /// <param name="tasksToRun">The tasks to run.</param>
-        /// <param name="maxTasksToRunInParallel">The maximum number of tasks to run in parallel.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
         public static Task StartAndWaitAllThrottled(this IEnumerable<DownloadTask> tasksToRun, int maxTasksToRunInParallel, CancellationToken cancellationToken = new CancellationToken())
         {
             return StartAndWaitAllThrottled(tasksToRun, maxTasksToRunInParallel, -1, cancellationToken);
         }
 
-        /// <summary>
-        /// Starts the given tasks and waits for them to complete. This will run, at most, the specified number of tasks in parallel.
-        /// <para>NOTE: If one of the given tasks has already been started, an exception will be thrown.</para>
-        /// </summary>
-        /// <param name="tasksToRun">The tasks to run.</param>
-        /// <param name="maxTasksToRunInParallel">The maximum number of tasks to run in parallel.</param>
-        /// <param name="timeoutInMilliseconds">The maximum milliseconds we should allow the max tasks to run in parallel before allowing another task to start. Specify -1 to wait indefinitely.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
         public static Task StartAndWaitAllThrottled(this IEnumerable<DownloadTask> tasksToRun, int maxTasksToRunInParallel, int timeoutInMilliseconds, CancellationToken cancellationToken = new CancellationToken())
         {
             Queue<DownloadTask> queues = new Queue<DownloadTask>(tasksToRun);
@@ -69,16 +52,16 @@ namespace FluentDownloader.Extensions
         private static DownloadTask SafeDequeue(Queue<DownloadTask> queues)
         {
             DownloadTask downloadTask = null;
-            try
+            lock (queues)
             {
-                lock (queues)
+                try
                 {
                     downloadTask = queues.Dequeue();
                 }
-            }
-            catch (Exception ex)
-            {
-
+                catch (Exception ex)
+                {
+                    //ignore
+                }
             }
             return downloadTask;
         }

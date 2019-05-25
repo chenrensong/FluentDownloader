@@ -26,8 +26,6 @@ namespace FluentDownloader.Networking
             return list;
         }
 
-
-
         protected override Task<bool> LoadDownloadInfoAsync(bool LoadSrc = true)
         {
             //本地文件路径
@@ -56,36 +54,32 @@ namespace FluentDownloader.Networking
             int Count = 0;
             Uri uri = new Uri(Url);
             IList<DownloadSegmentInfo> list = new List<DownloadSegmentInfo>();
-            var reader = new StreamReader(stream);
-            string line;
-            //long bytes = 0;
-
-            while ((line = reader.ReadLine()) != null)
+            using (var reader = new StreamReader(stream))
             {
-                string newUrl = string.Empty;
-                if (line.StartsWith("http:"))
+                string line;
+                while ((line = reader.ReadLine()) != null)
                 {
-                    newUrl = line;
-                }
-                else
-                {
-                    if (!line.StartsWith("#EXT"))
+                    string newUrl = string.Empty;
+                    if (line.StartsWith("http:"))
+                    {
+                        newUrl = line;
+                    }
+                    else if (!line.StartsWith("#EXT"))
                     {
                         var schema = uri.AbsoluteUri.Substring(0, uri.AbsoluteUri.LastIndexOf("/"));
                         newUrl = $"{schema}/{line}";
                     }
-                }
-                if (!string.IsNullOrEmpty(newUrl))
-                {
-                    var downloadSegmentInfo = new DownloadSegmentInfo()
+                    if (!string.IsNullOrEmpty(newUrl))
                     {
-                        ID = Count++,
-                        Url = newUrl,
-                        TotalReadBytes = 0,
-                        TempFile = Path.GetTempFileName()
-                    };
-                    list.Add(downloadSegmentInfo);
-                    Console.WriteLine($"Start {downloadSegmentInfo.Start}  {list.Count}");
+                        var downloadSegmentInfo = new DownloadSegmentInfo()
+                        {
+                            ID = Count++,
+                            Url = newUrl,
+                            TotalReadBytes = 0,
+                            TempFile = Path.GetTempFileName()
+                        };
+                        list.Add(downloadSegmentInfo);
+                    }
                 }
             }
             return Task.FromResult(list);
@@ -97,7 +91,6 @@ namespace FluentDownloader.Networking
         /// <returns></returns>
         protected override async Task ReconstructSegmentsAsync()
         {
-
             if (DownloadInfo.Count == 0)
             {
                 return;
@@ -116,7 +109,14 @@ namespace FluentDownloader.Networking
             // Delete all the Temp files, after the reconstraction process.
             foreach (var Segment in DownloadInfo)
             {
-                File.Delete(Segment.TempFile);
+                try
+                {
+                    File.Delete(Segment.TempFile);
+                }
+                catch (Exception ex)
+                {
+                    //ignore
+                }
             }
         }
 

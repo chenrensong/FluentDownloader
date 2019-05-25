@@ -4,12 +4,8 @@ using FluentDownloader.NetworkFile;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Diagnostics.Contracts;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
@@ -150,7 +146,6 @@ namespace FluentDownloader.Networking
                     var downloadInfo = JsonConvert.DeserializeObject<DownloadInfo>(downloadInfoText);
                     var count = downloadInfo.Count(m => m.Size == 0);
                     Console.WriteLine("downloadInfo" + count);
-
                     if (LoadSrc)
                     {
                         foreach (var item in downloadInfo)
@@ -200,10 +195,6 @@ namespace FluentDownloader.Networking
         {
             try
             {
-                //foreach (var item in FileSegmentaionTasks)
-                //{
-                //    item.Dispose();
-                //}
                 if (isForce || DownloadInfo.Percentage >= 100)
                 {
                     File.Delete(DownloadInfoFileFullPath);
@@ -229,7 +220,6 @@ namespace FluentDownloader.Networking
             DownloadInfo.ServerFileInfo = await ServerHelper.LoadServerInfoAsync(Url);
             //本地文件路径
             var fileName = SuggestedFileName ?? DownloadInfo.ServerFileInfo.Name;
-            //bool fileExists = File.Exists(LocalFileFullPath);
             //文件夹不存在，创建文件夹
             if (!Directory.Exists(DirectoryPath))
             {
@@ -379,7 +369,7 @@ namespace FluentDownloader.Networking
         /// <returns></returns>
         protected virtual DownloadTask DownloadSegmentFileAsync(DownloadSegmentInfo segment, Action<long, float> progressAction, CancellationToken cancellationToken = default)
         {
-            Stream localFile = null;
+            Stream localFile;
             if (string.IsNullOrEmpty(segment.TempFile))
             {
                 localFile = new FileStream(LocalFileFullPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
